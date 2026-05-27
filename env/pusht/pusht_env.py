@@ -379,9 +379,11 @@ class PushTEnv(gym.Env):
         with_target=True,
         shape="T",  # shape can be "T" <- the original shape, "I", "L", "Z", "square" and "small_tee"
         color="LightSlateGray",
-    ):  
+        bg_color=(255, 255, 255),
+    ):
         self.shape = shape
         self.color = color
+        self.bg_color = bg_color
         self._seed = None
         self.seed()
         self.window_size = ws = 512  # The size of the PyGame window
@@ -601,7 +603,7 @@ class PushTEnv(gym.Env):
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
-        canvas.fill((255, 255, 255))
+        canvas.fill(self.bg_color)
         self.screen = canvas
 
         draw_options = DrawOptions(canvas)

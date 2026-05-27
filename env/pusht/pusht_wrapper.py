@@ -6,13 +6,15 @@ from utils import aggregate_dct
 
 class PushTWrapper(PushTEnv):
     def __init__(
-            self, 
+            self,
             with_velocity=True,
             with_target=True,
+            bg_color=(255, 255, 255),
         ):
         super().__init__(
             with_velocity=with_velocity,
-            with_target=with_target, 
+            with_target=with_target,
+            bg_color=bg_color,
         )
         self.action_dim = self.action_space.shape[0]
     
