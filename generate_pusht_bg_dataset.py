@@ -25,7 +25,15 @@ import pygame
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-from env.pusht.pusht_env import PushTEnv
+# Load pusht_env directly to avoid env/__init__.py triggering mujoco_py
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location(
+    "pusht_env",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "env", "pusht", "pusht_env.py"),
+)
+_mod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+PushTEnv = _mod.PushTEnv
 
 
 BACKGROUND_CONFIGS = {
