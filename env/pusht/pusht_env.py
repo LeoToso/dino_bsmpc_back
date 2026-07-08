@@ -379,9 +379,16 @@ class PushTEnv(gym.Env):
         with_target=True,
         shape="T",  # shape can be "T" <- the original shape, "I", "L", "Z", "square" and "small_tee"
         color="LightSlateGray",
-    ):  
+        bg_color=(255, 255, 255),
+        bg_color2=None,
+        bg_type="solid",
+    ):
         self.shape = shape
         self.color = color
+        self.bg_color = bg_color
+        self.bg_color2 = bg_color2
+        self.bg_type = bg_type
+        self._bg_array = None
         self._seed = None
         self.seed()
         self.window_size = ws = 512  # The size of the PyGame window
@@ -592,6 +599,33 @@ class PushTEnv(gym.Env):
         }
         return info
 
+    def _build_background_array(self, width, height):
+        """(width, height, 3) uint8 array in pygame's surfarray (x, y, c) axis order."""
+        if self.bg_type == "gradient" and self.bg_color2 is not None:
+            t = np.linspace(0, 1, width, dtype=np.float32)
+            color1 = np.array(self.bg_color, dtype=np.float32)
+            color2 = np.array(self.bg_color2, dtype=np.float32)
+            grad = color1[None, :] * (1 - t[:, None]) + color2[None, :] * t[:, None]  # (w, 3)
+            arr = np.broadcast_to(grad[:, None, :], (width, height, 3))
+        elif self.bg_type == "checker" and self.bg_color2 is not None:
+            checker_size = 32
+            cx = (np.arange(width) // checker_size) % 2
+            cy = (np.arange(height) // checker_size) % 2
+            checker_mask = (cx[:, None] + cy[None, :]) % 2  # (w, h)
+            color1 = np.array(self.bg_color, dtype=np.uint8)
+            color2 = np.array(self.bg_color2, dtype=np.uint8)
+            arr = np.where(checker_mask[..., None] == 0, color1, color2)
+        else:
+            arr = np.broadcast_to(np.array(self.bg_color, dtype=np.uint8), (width, height, 3))
+        return arr.astype(np.uint8)
+
+    def _fill_background(self, canvas):
+        if self._bg_array is None:
+            self._bg_array = self._build_background_array(
+                canvas.get_width(), canvas.get_height()
+            )
+        pygame.surfarray.blit_array(canvas, self._bg_array)
+
     def _render_frame(self, mode):
         if self.window is None and mode == "human":
             pygame.init()
@@ -601,7 +635,7 @@ class PushTEnv(gym.Env):
             self.clock = pygame.time.Clock()
 
         canvas = pygame.Surface((self.window_size, self.window_size))
-        canvas.fill((255, 255, 255))
+        self._fill_background(canvas)
         self.screen = canvas
 
         draw_options = DrawOptions(canvas)

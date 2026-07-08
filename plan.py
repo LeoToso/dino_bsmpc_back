@@ -495,6 +495,10 @@ def planning_main(cfg_dict):
         background = cfg_dict.get("point_maze_env", {}).get("background")
         if background:
             env_kwargs["background"] = background
+    elif model_cfg.env.name == "pusht" and "pusht_env" in cfg_dict:
+        background = cfg_dict.get("pusht_env", {}).get("background")
+        if background:
+            env_kwargs["background"] = background
 
     # use dummy vector env for wall and deformable envs
     if model_cfg.env.name == "wall" or model_cfg.env.name == "deformable_env":

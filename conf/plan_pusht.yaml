@@ -34,6 +34,9 @@ n_plot_samples: 10
 
 debug_dset_init: False
 
+pusht_env:
+  background: default  # default, slight_change, color, large_color, large_color_gradient
+
 objective:
   _target_: planning.objectives.create_objective_fn
   alpha: 1
