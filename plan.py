@@ -9,7 +9,6 @@ import wandb
 import logging
 import warnings
 import numpy as np
-import submitit
 from itertools import product
 from pathlib import Path
 from einops import rearrange
@@ -23,6 +22,46 @@ from utils import cfg_to_dict, seed
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
+
+
+def _resolve_ckpt_base_path(ckpt_base: str) -> str:
+    """
+    Relative paths are resolved from the process cwd where the user launched plan.py
+    (Hydra run dir is plan_outputs/..., not the repo; use get_original_cwd for ./outputs).
+    """
+    p = Path(ckpt_base)
+    if p.is_absolute():
+        return str(p)
+    try:
+        from hydra.utils import get_original_cwd
+
+        return str(Path(get_original_cwd()) / p)
+    except Exception:
+        return str(Path(os.getcwd()) / p)
+
+
+def _load_trained_omega_config(model_path: str) -> OmegaConf:
+    """
+    train.py writes resolved config to <run_dir>/hydra.yaml. Hydra may also place
+    .hydra/config.yaml. Prefer the former so ${oc.env:...} values match training.
+    """
+    p = Path(model_path).resolve()
+    candidates = (p / "hydra.yaml", p / ".hydra" / "config.yaml")
+    for c in candidates:
+        if c.is_file():
+            log.info("Loading model config from %s", c)
+            return OmegaConf.load(str(c))
+    hint = (
+        f"Expected a training run directory. Tried: {candidates[0]!s}, {candidates[1]!s}. "
+        "Set ckpt_base_path to the parent of 'outputs' (e.g. absolute path to repo root) "
+        "and model_name to the subpath under outputs/ (e.g. 2026-04-21/18-44-53), "
+        "or copy the full run folder including hydra.yaml next to checkpoints."
+    )
+    if p.is_dir():
+        names = sorted(x.name for x in p.iterdir())
+        raise FileNotFoundError(f"{hint} Found in {p}: {names!r}")
+    raise FileNotFoundError(f"{hint} Directory does not exist: {p}")
+
 
 ALL_MODEL_KEYS = [
     "encoder",
@@ -44,6 +83,8 @@ def launch_plan_jobs(
         cfg_dicts,
         plan_output_dir,
 ):
+    import submitit  # optional: only for train-time Slurm eval jobs; not needed for `python plan.py`
+
     with submitit.helpers.clean_env():
         jobs = []
         for cfg_dict in cfg_dicts:
@@ -340,14 +381,15 @@ class PlanWorkspace:
         )
         logs = {f"final_eval/{k}": v for k, v in logs.items()}
         self.wandb_run.log(logs)
-        logs_entry = {
-            key: (
-                value.item()
-                if isinstance(value, (np.float32, np.int32, np.int64))
-                else value
-            )
-            for key, value in logs.items()
-        }
+
+        def _json_val(value):
+            if isinstance(value, np.ndarray):
+                return value.tolist()
+            if isinstance(value, np.generic):
+                return value.item()
+            return value
+
+        logs_entry = {key: _json_val(value) for key, value in logs.items()}
         with open(self.log_filename, "a") as file:
             file.write(json.dumps(logs_entry) + "\n")
         return logs
@@ -355,6 +397,16 @@ class PlanWorkspace:
 
 def load_ckpt(snapshot_path, device):
     with snapshot_path.open("rb") as f:
+        head = f.read(120)
+        if head.startswith(b"version https://git-lfs.github.com/spec/v1"):
+            raise ValueError(
+                f"{snapshot_path} is a Git LFS pointer (small text starting with "
+                "'version …'), not a real PyTorch checkpoint. Replace it with the "
+                "binary .pth, e.g. `git fetch && git checkout origin/main -- "
+                "outputs/2026-04-26/23-20-39/checkpoints/model_20.pth`, or curl/scp "
+                "the blob from GitHub / your training machine."
+            )
+        f.seek(0)
         payload = torch.load(f, map_location=device)
     loaded_keys = []
     result = {}
@@ -416,7 +468,7 @@ def load_model(model_ckpt, train_cfg, num_action_repeat, device):
     if has_bisim:
         model_kwargs.update({
             "bisim_model": result.get("bisim_model"),
-            "bisim_latent_dim": train_cfg.get('bisim_latent_dim', 64),
+            "bisim_latent_dim": train_cfg.get('bisim_latent_dim', 32),
             "bisim_hidden_dim": train_cfg.get('bisim_hidden_dim', 256),
             "bisim_coef": train_cfg.get('bisim_coef', 1.0),
             "var_loss_coef": train_cfg.get('var_loss_coef', 1.0),
@@ -428,6 +480,12 @@ def load_model(model_ckpt, train_cfg, num_action_repeat, device):
             "bypass_dinov2": train_cfg.model.get('bypass_dinov2', False),
             "bisim_memory_buffer_size": train_cfg.get('bisim_memory_buffer_size', 0),
             "bisim_comparison_size": train_cfg.get('bisim_comparison_size', 20),
+            "regularization": train_cfg.get('regularization', 'pca'),
+            "vicreg_inv_coef": train_cfg.get('vicreg_inv_coef', 25.0),
+            "vicreg_var_coef": train_cfg.get('vicreg_var_coef', 25.0),
+            "vicreg_cov_coef": train_cfg.get('vicreg_cov_coef', 1.0),
+            "vicreg_std_min": train_cfg.get('vicreg_std_min', 1.0),
+            "sigreg_sketch_dim": train_cfg.get('sigreg_sketch_dim', 64),
         })
 
     model = hydra.utils.instantiate(
@@ -470,10 +528,10 @@ def planning_main(cfg_dict):
     else:
         wandb_run = None
 
-    ckpt_base_path = cfg_dict["ckpt_base_path"]
-    model_path = f"{ckpt_base_path}/outputs/{cfg_dict['model_name']}/"
-    with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
-        model_cfg = OmegaConf.load(f)
+    ckpt_base_path = _resolve_ckpt_base_path(str(cfg_dict["ckpt_base_path"]))
+    model_name = str(cfg_dict["model_name"]).strip().strip("/")
+    model_path = str(Path(ckpt_base_path).resolve() / "outputs" / model_name)
+    model_cfg = _load_trained_omega_config(model_path)
 
     seed(cfg_dict["seed"])
     _, dset = hydra.utils.call(
@@ -495,10 +553,19 @@ def planning_main(cfg_dict):
         background = cfg_dict.get("point_maze_env", {}).get("background")
         if background:
             env_kwargs["background"] = background
-    elif model_cfg.env.name == "pusht" and "pusht_env" in cfg_dict:
-        background = cfg_dict.get("pusht_env", {}).get("background")
-        if background:
-            env_kwargs["background"] = background
+    if model_cfg.env.name == "wall" and cfg_dict.get("wall_env"):
+        env_kwargs.update(cfg_dict["wall_env"])
+    if model_cfg.env.name == "pusht" and cfg_dict.get("pusht_env"):
+        env_kwargs.update(cfg_dict["pusht_env"])
+
+    # PointMaze: gym ids live in env.pointmaze (loads mujoco_py). Omit for PushT so planning
+    # does not compile mujoco on machines that only run pusht.
+    if str(model_cfg.env.name) in (
+        "point_maze",
+        "point_maze_slight_change",
+        "point_maze_gradient",
+    ) or str(model_cfg.env.name).startswith("maze2d-"):
+        import env.pointmaze  # noqa: F401
 
     # use dummy vector env for wall and deformable envs
     if model_cfg.env.name == "wall" or model_cfg.env.name == "deformable_env":
@@ -541,7 +608,7 @@ def main(cfg: OmegaConf):
         cfg["saved_folder"] = os.getcwd()
         log.info(f"Planning result saved dir: {cfg['saved_folder']}")
     cfg_dict = cfg_to_dict(cfg)
-    cfg_dict["wandb_logging"] = True
+    cfg_dict["wandb_logging"] = cfg_dict.get("wandb_logging", True)
     planning_main(cfg_dict)
 
 

@@ -4,48 +4,19 @@ import gym
 from env.pusht.pusht_env import PushTEnv
 from utils import aggregate_dct
 
-# Background conditions matching the wall/point_maze test-time visual shift protocol
-PUSHT_BACKGROUND_CONFIGS = {
-    "default": {
-        "bg_color": (255, 255, 255),
-        "bg_type": "solid",
-    },
-    "slight_change": {
-        "bg_color": (235, 230, 225),
-        "bg_color2": (210, 205, 200),
-        "bg_type": "checker",
-    },
-    "color": {
-        "bg_color": (180, 210, 240),
-        "bg_color2": (150, 190, 225),
-        "bg_type": "gradient",
-    },
-    "large_color": {
-        "bg_color": (235, 235, 115),
-        "bg_color2": (200, 200, 65),
-        "bg_type": "checker",
-    },
-    "large_color_gradient": {
-        "bg_color": (46, 13, 89),
-        "bg_color2": (128, 56, 140),
-        "bg_type": "gradient",
-    },
-}
-
 class PushTWrapper(PushTEnv):
     def __init__(
-            self,
+            self, 
             with_velocity=True,
             with_target=True,
-            background="default",
+            visual_condition="NC",
+            distractor_seed=0,
         ):
-        bg_cfg = PUSHT_BACKGROUND_CONFIGS.get(background, PUSHT_BACKGROUND_CONFIGS["default"])
         super().__init__(
             with_velocity=with_velocity,
             with_target=with_target,
-            bg_color=bg_cfg["bg_color"],
-            bg_color2=bg_cfg.get("bg_color2"),
-            bg_type=bg_cfg["bg_type"],
+            visual_condition=visual_condition,
+            distractor_seed=distractor_seed,
         )
         self.action_dim = self.action_space.shape[0]
     

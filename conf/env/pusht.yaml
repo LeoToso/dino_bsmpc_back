@@ -7,6 +7,7 @@ kwargs:
 dataset:
   _target_: "datasets.pusht_dset.load_pusht_slice_train_val"
   with_velocity: true
+  # null = all train/val episodes; integer = cap (faster iteration).
   n_rollout: null
   normalize_action: ${normalize_action}
   data_path: ${oc.env:DATASET_DIR}/pusht_noise
