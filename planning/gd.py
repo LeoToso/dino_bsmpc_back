@@ -20,6 +20,8 @@ class GDPlanner(BasePlanner):
         preprocessor,
         evaluator,
         wandb_run,
+        optimizer_type="sgd",  # 'sgd' or 'adam' -- matches GD/Adam columns in Table 1 of
+                                # "Closing the Train-Test Gap in World Models for Gradient-Based Planning"
         logging_prefix="plan_0",
         log_filename="logs.json",
         **kwargs,
@@ -40,6 +42,7 @@ class GDPlanner(BasePlanner):
         self.opt_steps = opt_steps
         self.eval_every = eval_every
         self.logging_prefix = logging_prefix
+        self.optimizer_type = optimizer_type
 
     def init_actions(self, obs_0, actions=None):
         """
@@ -66,7 +69,12 @@ class GDPlanner(BasePlanner):
         return actions
 
     def get_action_optimizer(self, actions):
-        return torch.optim.SGD([actions], lr=self.lr)
+        if self.optimizer_type == "sgd":
+            return torch.optim.SGD([actions], lr=self.lr)
+        elif self.optimizer_type == "adam":
+            return torch.optim.Adam([actions], lr=self.lr)
+        else:
+            raise ValueError(f"Invalid optimizer_type: {self.optimizer_type}")
 
     def plan(self, obs_0, obs_g, actions=None):
         """
@@ -104,12 +112,9 @@ class GDPlanner(BasePlanner):
             loss = self.objective_fn(i_z_obses, z_obs_g_detached)  # (n_evals, )
             total_loss = loss.mean() * n_evals  # loss for each eval is independent
             total_loss.backward()
+            optimizer.step()
             with torch.no_grad():
-                actions_new = actions - optimizer.param_groups[0]["lr"] * actions.grad
-                actions_new += (
-                    torch.randn_like(actions_new) * self.action_noise
-                )  # Add Gaussian noise
-                actions.copy_(actions_new)
+                actions += torch.randn_like(actions) * self.action_noise  # Add Gaussian noise
 
             self.wandb_run.log(
                 {f"{self.logging_prefix}/loss": total_loss.item(), "step": i + 1}
