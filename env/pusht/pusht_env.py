@@ -611,7 +611,7 @@ class PushTEnv(gym.Env):
         canvas = pygame.Surface((self.window_size, self.window_size))
         vc = self.visual_condition
         if vc == "NC":
-            canvas.fill((255, 255, 255))  # confirmed to match the training data (see episode_000.mp4)
+            canvas.fill((235, 220, 80))  # yellow, matching the training background per user
         elif vc == "SC":
             canvas.fill((250, 235, 220))  # slight warm tint
         elif vc == "C":
@@ -626,7 +626,7 @@ class PushTEnv(gym.Env):
                 c = tuple(int(orange[k] * (1 - t) + purple[k] * t) for k in range(3))
                 pygame.draw.line(canvas, c, (i, 0), (i, ws))
         else:
-            canvas.fill((255, 255, 255))
+            canvas.fill((235, 220, 80))
         self.screen = canvas
 
         draw_options = DrawOptions(canvas)
