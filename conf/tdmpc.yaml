@@ -66,3 +66,6 @@ save_model: true
 seed: 1
 exp_name: default
 ckpt_base_path: ./checkpoints
+
+# eval_tdmpc.py only
+eval_checkpoint: null  # path to a model_*.pth saved by train_tdmpc.py
