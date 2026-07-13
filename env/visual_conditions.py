@@ -1,5 +1,7 @@
 """Test-time visual conditions (paper Table: NC, SC, C, LC, LCG, D) for non–PointMaze envs."""
 
+from __future__ import annotations
+
 from typing import FrozenSet
 
 VISUAL_COLUMNS: tuple[str, ...] = ("NC", "SC", "C", "LC", "LCG", "D")
