@@ -10,6 +10,7 @@ import numpy as np
 import gym
 import cv2
 from collections import deque
+from omegaconf import open_dict
 
 import env as _env_pkg  # noqa: F401  registers the "pusht" gym id
 
@@ -77,7 +78,8 @@ def make_env(cfg):
         visual_condition=cfg.get("visual_condition", "NC"),
         seed=cfg.get("seed"),
     )
-    cfg.obs_shape = tuple(int(x) for x in environment.observation_space.shape)
-    cfg.action_shape = tuple(int(x) for x in environment.action_space.shape)
-    cfg.action_dim = environment.action_space.shape[0]
+    with open_dict(cfg):
+        cfg.obs_shape = tuple(int(x) for x in environment.observation_space.shape)
+        cfg.action_shape = tuple(int(x) for x in environment.action_space.shape)
+        cfg.action_dim = environment.action_space.shape[0]
     return environment
