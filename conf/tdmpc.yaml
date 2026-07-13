@@ -1,0 +1,68 @@
+# TD-MPC baseline (Hansen, Wang, Su 2022; arXiv:2203.04955), adapted to PushT.
+# Field names match the reference implementation's cfgs/default.yaml + cfgs/pixels.yaml
+# (https://github.com/nicklashansen/tdmpc) so the algorithm code in tdmpc/ is a
+# near-verbatim port. Values that depend on action_repeat/episode_length are
+# pre-resolved here (assuming action_repeat=1) rather than using the reference's
+# "1000/${action_repeat}"-style runtime-evaluated string expressions.
+
+# environment
+task: pusht
+modality: pixels
+visual_condition: NC  # NC, SC, C, LC, LCG, D -- see env/visual_conditions.py
+action_repeat: 1
+discount: 0.99
+episode_length: 300  # matches max_episode_steps registered for the "pusht" gym id
+train_steps: 500000  # ~1667 episodes; override for a longer/shorter run
+
+# planning (Algorithm 1)
+iterations: 6
+num_samples: 512
+num_elites: 64
+mixture_coef: 0.05
+min_std: 0.05
+temperature: 0.5
+momentum: 0.1
+
+# learning (Algorithm 2)
+batch_size: 256
+max_buffer_size: 1000000
+horizon: 5
+reward_coef: 0.5
+value_coef: 0.1
+consistency_coef: 2
+rho: 0.5
+kappa: 0.1  # unused in the reference implementation; kept for config fidelity
+lr: 3e-4
+std_schedule: linear(0.5,${min_std},25000)
+horizon_schedule: linear(1,${horizon},25000)
+per_alpha: 0.6
+per_beta: 0.4
+grad_clip_norm: 10
+seed_steps: 5000
+update_freq: 2
+tau: 0.01
+
+# architecture
+enc_dim: 256
+mlp_dim: 512
+latent_dim: 50
+frame_stack: 3
+num_channels: 32
+img_size: 84
+
+# replay buffer storage device: reference sets this to 'cpu' for pixel modality
+# to avoid exhausting GPU memory storing millions of frames; sampled batches are
+# moved to cuda in ReplayBuffer._get_obs. The TOLD model itself always runs on cuda.
+device: cpu
+
+# logging
+wandb_logging: true
+eval_freq: 10000
+eval_episodes: 10
+save_video: false
+save_model: true
+
+# misc
+seed: 1
+exp_name: default
+ckpt_base_path: ./checkpoints
