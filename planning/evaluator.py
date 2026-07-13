@@ -127,8 +127,9 @@ class PlanEvaluator:  # evaluator for planning
         )
 
         # plot trajs
-        if self.wm.decoder is not None:
-            if hasattr(self.wm, 'has_bisim') and self.wm.has_bisim:
+        wm_has_bisim = hasattr(self.wm, 'has_bisim') and self.wm.has_bisim
+        if self.wm.decoder is not None or wm_has_bisim:
+            if wm_has_bisim:
                 max_action_len = int(action_len.max()) if isinstance(action_len, np.ndarray) else int(action_len)
                 b = e_visuals.shape[0]
                 h, w, c = e_visuals.shape[2], e_visuals.shape[3], e_visuals.shape[4]
