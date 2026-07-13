@@ -130,7 +130,14 @@ class PlanEvaluator:  # evaluator for planning
         wm_has_bisim = hasattr(self.wm, 'has_bisim') and self.wm.has_bisim
         if self.wm.decoder is not None or wm_has_bisim:
             if wm_has_bisim:
-                max_action_len = int(action_len.max()) if isinstance(action_len, np.ndarray) else int(action_len)
+                # action_len uses np.inf as a "not yet succeeded" sentinel (see
+                # _get_traj_last's np.where(length == np.inf, -1, ...) above) --
+                # fall back to the full planned horizon in that case.
+                if isinstance(action_len, np.ndarray):
+                    finite_action_len = np.where(np.isinf(action_len), actions.shape[1], action_len)
+                    max_action_len = int(finite_action_len.max())
+                else:
+                    max_action_len = int(action_len) if np.isfinite(action_len) else actions.shape[1]
                 b = e_visuals.shape[0]
                 h, w, c = e_visuals.shape[2], e_visuals.shape[3], e_visuals.shape[4]
                 i_visuals = torch.zeros(b, max_action_len + 1, h, w, c, device=self.device, dtype=torch.float32)
