@@ -50,7 +50,10 @@ class PushTTDMPCEnv:
         return np.concatenate(list(self._frames), axis=0)
 
     def reset(self):
-        obs = self._env.reset()
+        # PushTEnv.reset() returns (obs_dict, state) -- unlike step()'s standard
+        # 4-tuple, this deviates from the gym.Env convention (matches how the
+        # rest of this repo calls it directly, e.g. PushTWrapper.prepare()).
+        obs, _state = self._env.reset()
         frame = self._process_frame(obs)
         for _ in range(self.frame_stack):
             self._frames.append(frame)
