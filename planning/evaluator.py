@@ -139,8 +139,11 @@ class PlanEvaluator:  # evaluator for planning
                 else:
                     max_action_len = int(action_len) if np.isfinite(action_len) else actions.shape[1]
                 b = e_visuals.shape[0]
+                # e_visuals is raw (b, t, h, w, c) here, pre-transform_obs_visual;
+                # _plot_rollout_compare expects i_visuals channels-first (b, t, c, h, w)
+                # to match what the decoder branch below naturally produces.
                 h, w, c = e_visuals.shape[2], e_visuals.shape[3], e_visuals.shape[4]
-                i_visuals = torch.zeros(b, max_action_len + 1, h, w, c, device=self.device, dtype=torch.float32)
+                i_visuals = torch.zeros(b, max_action_len + 1, c, h, w, device=self.device, dtype=torch.float32)
             else:
                 # no bisimulation: use the regular rollout embeddings
                 i_visuals = self.wm.decode_obs(i_z_obses)[0]["visual"]
